@@ -4,8 +4,12 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/ipc.h>
 
 #define BUFSIZE 1024
+#define SHM_KEY 0x1234
+
 
 int main(int argc, char **argv)
 {
@@ -13,6 +17,24 @@ int main(int argc, char **argv)
 	char file[32], *exec[] = {"./palin", NULL}, *input;	
 	pid_t child = 0;
 	FILE *fp;
+	
+	//Shared memory section
+	int shmid;
+	char *shmPtr;
+	shmid = shmget(SHM_KEY, sizeof(shmPtr), 0644|IPC_CREAT);
+	if(shmid == -1)
+	{
+		perror("Shared memory");
+		return 1;
+	}
+
+	shmPtr = (char *) shmat(shmid, NULL, 0);
+	if (shmPtr == (void *) -1)
+	{
+		perror("Shared memoery attachment");
+		return 1;
+	}
+	//Shared memory variable should be created now
 
 	if (argc < 2)
 	{
@@ -61,6 +83,8 @@ int main(int argc, char **argv)
 	
 	printf("Input %s\n", input);
 	fclose(fp);
+	strcpy(shmPtr, input);
+	printf("Shared memory:\n%s\n", shmPtr);
 
 	if(proc_num < con_proc)
 	{
@@ -80,6 +104,7 @@ int main(int argc, char **argv)
 
 		if ((child = fork()) == 0) 
 		{
+			printf("Shared memory in child:\n%s\n", shmPtr);
 			execvp(exec[0], exec);
 			return 1;
 		}
@@ -98,6 +123,9 @@ int main(int argc, char **argv)
 		while(wait(NULL) > 0);
 
 	printf("Should be done!\n");
+
+	shmdt(shmPtr);
+	shmctl(shmid, IPC_RMID, NULL);
 		
 	return 0;
 }
