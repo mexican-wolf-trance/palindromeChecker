@@ -80,11 +80,9 @@ int main(int argc, char **argv)
                 if(input != NULL)
                 	fread(input, 1, length, fp);
 	}
-	
-	printf("Input %s\n", input);
+
 	fclose(fp);
 	strcpy(shmPtr, input);
-	printf("Shared memory:\n%s\n", shmPtr);
 
 	if(proc_num < con_proc)
 	{
@@ -104,15 +102,13 @@ int main(int argc, char **argv)
 
 		if ((child = fork()) == 0) 
 		{
-			printf("Shared memory in child:\n%s\n", shmPtr);
 			execvp(exec[0], exec);
-			return 1;
+			exit(1);
 		}
 		if (child < 0)
 		{
 			perror("Failed to fork\n");
-			return 1;
-		}
+			exit(1);	
 
 		if (waitpid(-1, NULL, WNOHANG) > 0)
 			counter--;
