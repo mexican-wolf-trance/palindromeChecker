@@ -13,8 +13,8 @@
 
 int main(int argc, char **argv)
 {
-	int option, proc_num = 4, con_proc = 2, proc_time = 100, counter = 0;
-	char file[32], *exec[] = {"./palin", NULL}, *input;	
+	int option, proc_num = 4, con_proc = 2, proc_time = 100, counter = 0, pid;
+	char b[2], cpid[32], file[32], *exec[] = {"./palin", NULL, NULL, NULL}, *input;	
 	pid_t child = 0;
 	FILE *fp;
 	
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
 
 	if(proc_num > 20)
 	{
-		printf("You entered too processes. We'll keep it to 20.\n");
+		printf("You entered too many processes. We'll keep it to 20.\n");
 		proc_num = 20;
 	}
 
@@ -164,18 +164,22 @@ int main(int argc, char **argv)
 
 		counter++;
 		//This determines the starting index in the palin exe
-		char b[2];
 		snprintf(b, 2, "%d", i);
 		//We add it to the arguments sent to palin
 		exec[1] = b;
-		exec[2] = NULL;
-
 		i++;
+
 		if (i == strSize)
 			i = 0;
 		
 		if ((child = fork()) == 0) 
 		{
+			//get and send pid to child
+			pid = getpid();
+			snprintf(cpid, 32, "%u", pid);
+			exec[2] = cpid;
+			exec[3] = NULL;
+
 			execvp(exec[0], exec);
 			perror("Exec failed");
 		}

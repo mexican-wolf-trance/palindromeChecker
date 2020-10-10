@@ -28,13 +28,11 @@ void isPali(char str[])
 
 int main(int argc, char *argv[])
 {
-	int shmid, i, j = 0, startingIndex;
+	int shmid, i, j = 0, startingIndex, pid;
 	char *shmPtr;
 //	FILE *pali, *nonp, *log;
-	
-	printf("We're in the palindrome!\n");	
 
-	if (argc > 2)
+	if (argc > 3)
 	{
 		fprintf(stderr, "%s: Too few arguments!", argv[0]);
 		exit(1);
@@ -53,6 +51,8 @@ int main(int argc, char *argv[])
 	}
 
 	startingIndex = atoi(argv[1]) * 80;
+	pid = atoi(argv[2]);
+	printf("We're in the palindrome! Child process no %d\n", pid);
 /*	
 	if ((pali == fopen("palin.out", "w")) == NULL)
 	{
@@ -76,9 +76,7 @@ int main(int argc, char *argv[])
 		temp[j] = shmPtr[i];
 		j++;
 	}
-	for (i = 0; i < strlen(temp); i++)
-		printf("%c", temp[i]);
-	printf("\n");
+
 	isPali(temp);
 
 	sleep(2);
