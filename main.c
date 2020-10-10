@@ -18,13 +18,14 @@ int main(int argc, char **argv)
 	pid_t child = 0;
 	FILE *fp;
 	
-
+	//Check there is the correct number of arguments
 	if (argc < 2)
 	{
 		printf("Invalid usage! Check the readme\nUsage: master [-n x] [-s x] [-t time] file\n");
 		return 0;
 	}
 
+	//Create and validate the options
 	while ((option = getopt(argc, argv, "hn:s:t:")) != -1)
 	switch (option)
 	{
@@ -47,8 +48,11 @@ int main(int argc, char **argv)
 			printf("%c is not an option\n", optopt);
 	}
 	strcpy(file, argv[optind]);
+
+	//Display the options chosen
 	printf("You entered these options: -n %d -s %d -t %d %s\n", proc_num, con_proc, proc_time, file);
 
+	//Want to make sure the options make sense
         if(proc_num < con_proc)
         {
                 printf("I noticed you wanted more concurrent processes than you indicated would be the max number of processes. That's dumb. I'll make them equivalent so we can continue.\n");
@@ -61,7 +65,7 @@ int main(int argc, char **argv)
 		proc_num = 20;
 	}
 
-
+	//Read the chose file
 	if((fp = fopen(file, "r")) == NULL)
 	{
 		perror("Failed to open file");
@@ -159,9 +163,10 @@ int main(int argc, char **argv)
 		}
 
 		counter++;
+		//This determines the starting index in the palin exe
 		char b[2];
 		snprintf(b, 2, "%d", i);
-
+		//We add it to the arguments sent to palin
 		exec[1] = b;
 		exec[2] = NULL;
 
@@ -189,7 +194,7 @@ int main(int argc, char **argv)
 		while(wait(NULL) > 0);
 
 	printf("Should be done!\n");
-
+	//Deallocate shared memory
 	shmdt(shmPtr);
 	shmctl(shmid, IPC_RMID, NULL);
 		
