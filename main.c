@@ -18,23 +18,6 @@ int main(int argc, char **argv)
 	pid_t child = 0;
 	FILE *fp;
 	
-	//Shared memory section
-	int shmid;
-	char *shmPtr;
-	shmid = shmget(SHM_KEY, sizeof(shmPtr), 0644|IPC_CREAT);
-	if(shmid == -1)
-	{
-		perror("Shared memory");
-		return 1;
-	}
-
-	shmPtr = (char *) shmat(shmid, NULL, 0);
-	if (shmPtr == (void *) -1)
-	{
-		perror("Shared memoery attachment");
-		return 1;
-	}
-	//Shared memory variable should be created now
 
 	if (argc < 2)
 	{
@@ -66,6 +49,19 @@ int main(int argc, char **argv)
 	strcpy(file, argv[optind]);
 	printf("You entered these options: -n %d -s %d -t %d %s\n", proc_num, con_proc, proc_time, file);
 
+        if(proc_num < con_proc)
+        {
+                printf("I noticed you wanted more concurrent processes than you indicated would be the max number of processes. That's dumb. I'll make them equivalent so we can continue.\n");
+                proc_num = con_proc;
+        }
+
+	if(proc_num > 20)
+	{
+		printf("You entered too processes. We'll keep it to 20.\n");
+		proc_num = 20;
+	}
+
+
 	if((fp = fopen(file, "r")) == NULL)
 	{
 		perror("Failed to open file");
@@ -82,14 +78,78 @@ int main(int argc, char **argv)
 	}
 
 	fclose(fp);
-	strcpy(shmPtr, input);
-
-	if(proc_num < con_proc)
+	
+	//String manipulation section
+	int i, j = 0, k = 0, strSize = 0;
+	//remove the spaces from the string and decapitalize
+	for (i = 0; i < strlen(input); i++)
 	{
-		printf("I noticed you wanted more concurrent processes than you indicated would be the max number of processes. That's dumb. I'll make them equivalent so we can continue.\n");
-		proc_num = con_proc;
+		input[i] = input[i + k];
+		if (input[i] == ' ')
+		{
+			k++;
+			i--;
+		}
+		if (isupper(input[i]))
+                        input[i] = tolower(input[i]);
 	}
+	//determine number of lines in the input string
+	for (i = 0; i < strlen(input); i++)
+	{
+		if (input[i] == '\t' || input[i] == '\n' || input[i] == '\r')
+			strSize++;
+	}
+	
+	//create the shared memory variable based on the number of lines in the input
+        int shmid;
+        char *shmPtr;
+        shmid = shmget(SHM_KEY, 80 * strSize, 0644|IPC_CREAT);
+        if(shmid == -1)
+        {
+                perror("Shared memory");
+                return 1;
+        }
 
+        shmPtr = (char *) shmat(shmid, NULL, 0);
+        if (shmPtr == (void *) -1)
+        {
+                perror("Shared memoery attachment");
+                return 1;
+        }
+
+	//add strings to presized segements of the array and fill the rest with \0 for easy access
+	for (i = 0; i < strlen(input); i++)
+	{		
+		if (input[i] == '\t' || input[i] == '\n' || input[i] == '\r')
+		{
+			for (; (j % 80) != 0; j++);
+				shmPtr[j] = '\0';	
+			i++;
+		}
+		shmPtr[j] = input[i];
+		j++;
+	}
+	//make sure the string copied over correctly by printing it to the console
+	j = 0;
+	printf("Strings present in shmPtr:\n");
+	for (i = 0; i < strSize * 80; i++)
+	{
+		if (shmPtr[i] == '\0')
+		{	
+			printf(" ");
+			j++;
+			i = 80*j;
+		}	
+		printf("%c", shmPtr[i]);
+	}
+	printf("\n");
+	//copy the new string into shared memory
+//	strcpy(shmPtr, input);
+//	strcpy(shmPtr, temp);
+	free(input);
+
+	//Children factory
+	i = 0;
 	while(proc_num > 0)
 	{
 		if(con_proc == counter)
@@ -99,16 +159,26 @@ int main(int argc, char **argv)
 		}
 
 		counter++;
+		char b[2];
+		snprintf(b, 2, "%d", i);
 
+		exec[1] = b;
+		exec[2] = NULL;
+
+		i++;
+		if (i == strSize)
+			i = 0;
+		
 		if ((child = fork()) == 0) 
 		{
 			execvp(exec[0], exec);
-			exit(1);
+			perror("Exec failed");
 		}
 		if (child < 0)
 		{
 			perror("Failed to fork\n");
-			exit(1);	
+			exit(1);
+		}	
 
 		if (waitpid(-1, NULL, WNOHANG) > 0)
 			counter--;
