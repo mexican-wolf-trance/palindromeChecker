@@ -15,4 +15,4 @@ palindromeChecker.o: palindromeChecker.c
 	$(CC) $(CFLAGS) -c palindromeChecker.c
 
 clean:
-	/bin/rm -f *.o  $(TARGET) $(TARGET2) palin.out nopalin.out
+	/bin/rm -f *.o  $(TARGET) $(TARGET2) palin.out nopalin.out log.out

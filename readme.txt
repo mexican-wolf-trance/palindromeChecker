@@ -20,4 +20,10 @@ What it cannot do:
 	React to CTRL+C or the overall time limit
 	Read results into palin.out, nopalin.out, or log.out
 
-Considering I only had 2 and a half days to work on it (yes I did start the day it was due), I think I figured out quite a bit of it. 
+Considering I only had 2 and a half days to work on it (yes I did start the day it was due), I think I figured out quite a bit of it.
+
+****************UPDATE 12/14/2020***********************
+FIXED:
+	IPC works perfectly with message queues
+	All signal handling works perfectly (CTRL C, alarm, seg fault, misc)
+	Log files work perfectly 

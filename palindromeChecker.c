@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 {
 	int shmid, msgqid, i, j = 0, startingIndex, pid;
 	char *shmPtr;
-	FILE *pali, *nonp;
+	FILE *pali, *nonp, *log;
 
 	if ((shmid = shmget(SHM_KEY, sizeof(shmPtr), 0644)) < 0)
 	{
@@ -76,6 +76,11 @@ int main(int argc, char *argv[])
                 perror("Nopalin.out");
                 exit(1);
         }
+	if ((log = fopen("log.out", "a")) == NULL)
+	{
+		perror("Log.out");
+		exit(1);
+	}
 
 	char temp[80];
 	for (i = startingIndex; i < (startingIndex + 80); i++)
@@ -92,15 +97,17 @@ int main(int argc, char *argv[])
 	if(msgrcv(msgqid, &message, sizeof(message), 1, 0) > 0)
 	{
 		sleep(2);
+		fprintf(log, "%li %d %s %s", (long) pid, startingIndex / 80, temp, "\n");
 		if(isPali(temp))
-			fprintf(pali,"%li %d %s %s", (long) pid, startingIndex, temp, "is a palindrome!\n");
+			fprintf(pali,"%s %s", temp, "\n");
 		else
-			fprintf(nonp,"%li %d %s %s", (long) pid, startingIndex, temp, "is not a palindrome...\n");
+			fprintf(nonp, "%s %s", temp, "\n");
 		message.mtype = 1;
 		message.msg = 1;
 		msgsnd(msgqid, &message, sizeof(message), 0);
 	}
 
+	fclose(log);
 	fclose(pali);
 	fclose(nonp);
 }
