@@ -3,21 +3,56 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/wait.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
+#include <sys/msg.h>
+#include <signal.h>
 
 #define BUFSIZE 1024
-#define SHM_KEY 0x1234
+#define SHM_KEY 0x12345
+#define MSG_KEY 0x98765
 
+struct msgbuf
+{
+	long mtype;
+	int msg;
+} message;
+
+int shmid, msgqid;
+char *shmPtr;
+
+void sigint(int sig)
+{
+        shmdt(shmPtr);
+        shmctl(shmid, IPC_RMID, NULL);
+	if (msgctl(msgqid, IPC_RMID, NULL) == -1)
+                fprintf(stderr, "Message queue could not be deleted\n");
+
+        if(sig == SIGALRM)
+                write(1, "\nAlarm! Alarm!\n", 15);
+        else if(sig == SIGSEGV)
+                write(1, "\nWoops! You got a segmentation fault!\n", 38);
+        else if(sig == SIGINT)
+                write(1, "\nCTRL C was hit!\n", 17);
+        else
+                write(1, "Oh no! An error!\n", 17);
+
+        write(1, "Now killing the kiddos\n", 23);
+        kill(0, SIGQUIT);
+}
 
 int main(int argc, char **argv)
 {
-	int option, proc_num = 4, con_proc = 2, proc_time = 100, counter = 0, pid;
-	char b[2], cpid[32], file[32], *exec[] = {"./palin", NULL, NULL, NULL}, *input;	
+	signal(SIGINT, sigint);
+        signal(SIGSEGV, sigint);
+
+	int option, proc_num = 4, con_proc = 2, proc_time = 100, counter = 0;
+	char b[2], file[32], *exec[] = {"./palin", NULL, NULL}, *input;	
 	pid_t child = 0;
 	FILE *fp;
-	
+
 	//Check there is the correct number of arguments
 	if (argc < 2)
 	{
@@ -45,7 +80,7 @@ int main(int argc, char **argv)
 			proc_time = atoi(optarg);
 			break;
 		case '?':
-			printf("%c is not an option\n", optopt);
+			printf("%c is not an option. Use -h for usage details\n", optopt);
 	}
 	strcpy(file, argv[optind]);
 
@@ -59,13 +94,21 @@ int main(int argc, char **argv)
                 proc_num = con_proc;
         }
 
-	if(proc_num > 20)
+	if(proc_num > 20 && con_proc > 20)
 	{
-		printf("You entered too many processes. We'll keep it to 20.\n");
-		proc_num = 20;
+		printf("That's a lot of processes. We'll keep the number of concurrent process to 20.\n");
+		con_proc = 20;
 	}
 
-	//Read the chose file
+	//set up message queue
+        msgqid = msgget(MSG_KEY, 0644 | IPC_CREAT);
+        if (msgqid == -1)
+        {
+                perror("msgqid get failed");
+                return 1;
+        }
+
+	//Read the chosen file
 	if((fp = fopen(file, "r")) == NULL)
 	{
 		perror("Failed to open file");
@@ -84,16 +127,18 @@ int main(int argc, char **argv)
 	fclose(fp);
 	
 	//String manipulation section
-	int i, j = 0, k = 0, strSize = 0;
-	//remove the spaces from the string and decapitalize
-	for (i = 0; i < strlen(input); i++)
+	int i, j = 0, strSize = 0;
+	//remove the spaces and special characters from the string and decapitalize
+	for (i = 0; input[i] != '\0'; i++)
 	{
-		input[i] = input[i + k];
-		if (input[i] == ' ')
+		if ((input[i] >= 'A' && input[i] <= 'Z') || (input[i] >= 'a' && input[i] <= 'z') || input[i] == '\t' || input[i] == '\n' || input[i] == '\r')
 		{
-			k++;
-			i--;
+			input[j] = input[i];
+			j++;
 		}
+	}
+	for (i = 0; input[i] != '\0'; i++)
+	{
 		if (isupper(input[i]))
                         input[i] = tolower(input[i]);
 	}
@@ -103,25 +148,21 @@ int main(int argc, char **argv)
 		if (input[i] == '\t' || input[i] == '\n' || input[i] == '\r')
 			strSize++;
 	}
-	
-	//create the shared memory variable based on the number of lines in the input
-        int shmid;
-        char *shmPtr;
-        shmid = shmget(SHM_KEY, 80 * strSize, 0644|IPC_CREAT);
-        if(shmid == -1)
+	//set up shared memory
+        if ((shmid = shmget(SHM_KEY, sizeof(shmPtr), 0644|IPC_CREAT)) < 0)
         {
-                perror("Shared memory");
-                return 1;
+                perror("Shmget failed");
+                exit(1);
         }
 
-        shmPtr = (char *) shmat(shmid, NULL, 0);
-        if (shmPtr == (void *) -1)
+        if ((shmPtr = (char *) shmat(shmid, NULL, 0)) < 0)
         {
-                perror("Shared memoery attachment");
-                return 1;
+                perror("Shmat failed");
+                exit(1);
         }
 
 	//add strings to presized segements of the array and fill the rest with \0 for easy access
+	j = 0;
 	for (i = 0; i < strlen(input); i++)
 	{		
 		if (input[i] == '\t' || input[i] == '\n' || input[i] == '\r')
@@ -147,11 +188,15 @@ int main(int argc, char **argv)
 		printf("%c", shmPtr[i]);
 	}
 	printf("\n");
-	//copy the new string into shared memory
-//	strcpy(shmPtr, input);
-//	strcpy(shmPtr, temp);
+	//free malloc
 	free(input);
+	
+	message.mtype = 1;
+	message.msg = 1;
+	msgsnd(msgqid, &message, sizeof(message), 0);
 
+	alarm(proc_time);
+	signal(SIGALRM, sigint);
 	//Children factory
 	i = 0;
 	while(proc_num > 0)
@@ -167,6 +212,7 @@ int main(int argc, char **argv)
 		snprintf(b, 2, "%d", i);
 		//We add it to the arguments sent to palin
 		exec[1] = b;
+		exec[2] = NULL;
 		i++;
 
 		if (i == strSize)
@@ -174,15 +220,11 @@ int main(int argc, char **argv)
 		
 		if ((child = fork()) == 0) 
 		{
-			//get and send pid to child
-			pid = getpid();
-			snprintf(cpid, 32, "%u", pid);
-			exec[2] = cpid;
-			exec[3] = NULL;
 
 			execvp(exec[0], exec);
 			perror("Exec failed");
 		}
+
 		if (child < 0)
 		{
 			perror("Failed to fork\n");
@@ -193,15 +235,15 @@ int main(int argc, char **argv)
 			counter--;
 		proc_num--;
 	}
-
 	if (child > 0)
-		while(wait(NULL) > 0);
+		while(wait(NULL) > 0);				
 
 	printf("Should be done!\n");
 	//Deallocate shared memory
 	shmdt(shmPtr);
 	shmctl(shmid, IPC_RMID, NULL);
-		
+        if (msgctl(msgqid, IPC_RMID, NULL) == -1)
+                fprintf(stderr, "Message queue could not be deleted\n");
+			
 	return 0;
 }
-

@@ -6,11 +6,20 @@
 #include <sys/wait.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
+#include <sys/msg.h>
 
 #define BUFFSIZE 1024
-#define SHM_KEY 0x1234
+#define SHM_KEY 0x12345
+#define MSG_KEY 0x98765
 
-void isPali(char str[])
+struct msgbuf
+{
+        long mtype;
+        int msg;
+} message;
+
+
+int isPali(char str[])
 {
 	int l = 0;
 	int h = strlen(str) - 1;
@@ -20,23 +29,18 @@ void isPali(char str[])
 		if (str[l++] != str[h--])
 		{
 			printf("%s is not a palindrome\n", str);
-			exit(1);
+			return 0;
 		}
 	}
 	printf("%s is a palindrome\n", str);
+	return 1;
 }
 
 int main(int argc, char *argv[])
 {
-	int shmid, i, j = 0, startingIndex, pid;
+	int shmid, msgqid, i, j = 0, startingIndex, pid;
 	char *shmPtr;
-//	FILE *pali, *nonp, *log;
-
-	if (argc > 3)
-	{
-		fprintf(stderr, "%s: Too few arguments!", argv[0]);
-		exit(1);
-	}
+	FILE *pali, *nonp;
 
 	if ((shmid = shmget(SHM_KEY, sizeof(shmPtr), 0644)) < 0)
 	{
@@ -50,21 +54,29 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+        msgqid = msgget(MSG_KEY, 0644 | IPC_CREAT);
+        if (msgqid == -1)
+        {
+                perror("msgqid get failed");
+                return 1;
+        }
+
+
 	startingIndex = atoi(argv[1]) * 80;
-	pid = atoi(argv[2]);
+	pid = getpid();
 	printf("We're in the palindrome! Child process no %d\n", pid);
-/*	
-	if ((pali == fopen("palin.out", "w")) == NULL)
+	
+	if ((pali = fopen("palin.out", "a")) == NULL)
 	{
 		perror("Palin.out");
 		exit(1);
 	}
-        if ((nonp == fopen("nopalin.out", "w")) == NULL)
+        if ((nonp = fopen("nopalin.out", "a")) == NULL)
         {
                 perror("Nopalin.out");
                 exit(1);
         }
-*/
+
 	char temp[80];
 	for (i = startingIndex; i < (startingIndex + 80); i++)
 	{
@@ -77,10 +89,18 @@ int main(int argc, char *argv[])
 		j++;
 	}
 
-	isPali(temp);
+	if(msgrcv(msgqid, &message, sizeof(message), 1, 0) > 0)
+	{
+		sleep(2);
+		if(isPali(temp))
+			fprintf(pali,"%li %d %s %s", (long) pid, startingIndex, temp, "is a palindrome!\n");
+		else
+			fprintf(nonp,"%li %d %s %s", (long) pid, startingIndex, temp, "is not a palindrome...\n");
+		message.mtype = 1;
+		message.msg = 1;
+		msgsnd(msgqid, &message, sizeof(message), 0);
+	}
 
-	sleep(2);
-
-//	fclose(pali);
-//	fclose(nonp);
+	fclose(pali);
+	fclose(nonp);
 }
